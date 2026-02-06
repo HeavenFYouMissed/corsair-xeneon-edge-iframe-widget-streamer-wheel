@@ -1,4 +1,6 @@
 # � Xeneon Edge Stream Widgets
+<img width="1673" height="1379" alt="Screenshot 2026-02-06 105047" src="https://github.com/user-attachments/assets/0a6b433c-281e-44ae-ae18-a681b97ae6c8" />
+<img width="1667" height="1372" alt="Screenshot 2026-02-06 065246" src="https://github.com/user-attachments/assets/c342382a-2fbe-4086-965b-7d11545c51fe" />
 
 **Interactive widgets for Corsair Xeneon Edge monitor**
 
@@ -96,7 +98,8 @@ Both files are fully self-contained and easy to customize:
 
 ## 📸 Screenshots
 
-*[Screenshots will be added showing both wheel styles in action]*
+*[Screenshots added showing both wheel styles in action]*
+<img width="3430" height="1434" alt="Screenshot 2026-02-06 065322" src="https://github.com/user-attachments/assets/6aa69f0d-e9de-4342-9036-5ade5f1e4395" />
 
 ## 💡 Tips
 
