@@ -1,0 +1,386 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>3D Neon Slot Machine – Xeneon Edge</title>
+  <style>
+    * { margin:0; padding:0; box-sizing:border-box; }
+    body {
+      height:100vh; background:#050014; color:#fff; font-family:Arial,sans-serif;
+      overflow:hidden; touch-action:manipulation;
+      display:flex; justify-content:center; align-items:center;
+    }
+    .cabinet {
+      position:relative; width:90vmin; max-width:720px; height:90vh; max-height:680px;
+      background:linear-gradient(135deg, #1a0033 0%, #0a0015 100%);
+      border:5px solid #ff3366; border-radius:28px;
+      box-shadow:0 0 80px #ff336680, inset 0 0 40px rgba(255,51,102,0.25);
+      overflow:hidden; padding:20px;
+    }
+    .top-lights {
+      position:absolute; top:0; left:0; right:0; height:30px;
+      background:linear-gradient(to right, #ff3366, #ff6f61, #ffca28, #33ff99, #3399ff, #ff3366);
+      background-size:200% 100%; animation:marquee 12s linear infinite;
+      opacity:0.7; box-shadow:0 4px 20px #ff3366;
+    }
+    @keyframes marquee { 0% { background-position:0% 0; } 100% { background-position:-200% 0; } }
+    @keyframes flash-lights {
+      0%, 100% { opacity:0.7; background-position:0% 0; }
+      25% { opacity:1; background-position:-50% 0; }
+      50% { opacity:0.85; background-position:-100% 0; }
+      75% { opacity:1; background-position:-150% 0; }
+    }
+    .top-lights.flashing { animation:flash-lights 0.4s linear infinite; }
+
+    #stage {
+      perspective:1400px; width:100%; height:320px; margin:20px 0;
+      text-align:center;
+    }
+    #rotate {
+      transform-style:preserve-3d; width:100%; height:100%; position:relative;
+    }
+    .ring {
+      position:absolute; width:110px; height:110px; top:100px;
+      transform-style:preserve-3d; transform:translateX(-50%);
+      transition:transform 0.4s;
+    }
+    .slot {
+      position:absolute; width:100%; height:100%; background:rgba(255,255,255,0.92);
+      border:3px solid #222; backface-visibility:hidden;
+      display:flex; align-items:center; justify-content:center;
+      font-size:64px; color:#000; box-shadow:0 6px 16px rgba(0,0,0,0.6);
+      border-radius:8px;
+    }
+
+    .lever-area {
+      position:absolute; right:10px; top:35%; width:50px; z-index:10;
+    }
+    .lever {
+      position:relative; width:35px; height:280px; margin:0 auto;
+      background:linear-gradient(#555, #222, #444);
+      border-radius:20px 20px 10px 10px;
+      cursor:grab; transition:transform 0.6s cubic-bezier(0.68,-0.55,0.265,1.55);
+      box-shadow:0 8px 30px rgba(0,0,0,0.9), inset 0 3px 8px #777;
+    }
+    .lever.pulled { transform:translateY(120px) rotate(12deg); cursor:grabbing; }
+    .knob {
+      position:absolute; top:15px; left:50%; transform:translateX(-50%);
+      width:42px; height:42px; background:#ff3366;
+      border-radius:50%; box-shadow:0 0 25px #ff3366, inset 0 5px 10px rgba(0,0,0,0.6);
+    }
+    .lever-base {
+      position:absolute; bottom:-15px; left:50%; transform:translateX(-50%);
+      width:50px; height:30px; background:#333; border-radius:15px;
+      box-shadow:0 6px 15px #000;
+    }
+
+    .bet-panel {
+      display:flex; flex-wrap:wrap; justify-content:center; align-items:center; gap:10px;
+      margin:15px 0; font-size:1rem; padding:0 10px;
+    }
+    .bet-btn, .max-bet {
+      padding:10px 20px; background:#ff3366; color:white; border:none;
+      border-radius:12px; cursor:pointer; font-weight:bold;
+      box-shadow:0 4px 14px #ff336680; transition:transform 0.15s;
+      font-size:0.95rem;
+    }
+    .bet-btn:active, .max-bet:active { transform:translateY(3px); }
+    .bet-btn:disabled, .max-bet:disabled { opacity:0.5; cursor:not-allowed; }
+    .bet-btn.active, .max-bet.active {
+      background:#33ff99; box-shadow:0 4px 14px #33ff9980;
+      transform:scale(1.05);
+    }
+    .credits-display, .bet-display {
+      padding:10px 20px; background:rgba(255,255,255,0.12);
+      border-radius:12px; border:2px solid #ff336666;
+      font-weight:bold; font-size:1.1rem;
+      box-shadow:0 2px 10px rgba(0,0,0,0.4);
+      min-width:140px; text-align:center;
+    }
+    .credits-display {
+      background:rgba(51,255,153,0.15);
+      border-color:#33ff9966;
+      color:#33ff99;
+    }
+    #result {
+      font-size:clamp(2rem,7vw,4.5rem); margin:20px 0; font-weight:900;
+      text-shadow:0 0 35px #ff3366; opacity:0; transition:opacity 0.8s;
+      text-align:center; min-height:80px;
+    }
+    #result.show { opacity:1; }
+  </style>
+</head>
+<body>
+
+<div class="cabinet">
+  <div class="top-lights"></div>
+
+  <div id="stage">
+    <div id="rotate">
+      <div id="ring1" class="ring" style="left:10%;"></div>
+      <div id="ring2" class="ring" style="left:30%;"></div>
+      <div id="ring3" class="ring" style="left:50%;"></div>
+      <div id="ring4" class="ring" style="left:70%;"></div>
+      <div id="ring5" class="ring" style="left:90%;"></div>
+    </div>
+  </div>
+
+  <div class="lever-area">
+    <div class="lever" id="lever">
+      <div class="knob"></div>
+    </div>
+    <div class="lever-base"></div>
+  </div>
+
+  <div class="bet-panel">
+    <button class="bet-btn active" data-bet="10">Bet 10</button>
+    <button class="bet-btn" data-bet="25">Bet 25</button>
+    <button class="bet-btn" data-bet="50">Bet 50</button>
+    <button class="bet-btn" data-bet="100">Bet 100</button>
+    <button class="max-bet">Max Bet</button>
+    <div class="credits-display">Credits: <span id="credits">1000</span></div>
+    <div class="bet-display">Bet: <span id="bet">10</span></div>
+  </div>
+
+  <div id="result">PULL THE LEVER!</div>
+</div>
+
+<canvas id="confetti" style="position:absolute;inset:0;pointer-events:none;z-index:20;"></canvas>
+
+<script>
+// ──────────────────────────────────────────────
+//   3D Cylinder Slot Machine with Lever & Betting
+// ──────────────────────────────────────────────
+
+const SLOTS_PER_REEL = 12;
+const REEL_RADIUS = 150;
+const symbols = ['🍒','🍋','🍇','🍉','⭐','7️⃣','💎','🔔'];
+
+let credits = 1000;
+let currentBet = 10;
+let isPulling = false;
+let isSpinning = false;
+
+const creditsEl = document.getElementById('credits');
+const betEl = document.getElementById('bet');
+const lever = document.getElementById('lever');
+const result = document.getElementById('result');
+const topLights = document.querySelector('.top-lights');
+const confettiCanvas = document.getElementById('confetti');
+const ctx = confettiCanvas.getContext('2d');
+let particles = [];
+
+// Confetti setup
+function resizeConfetti() {
+  confettiCanvas.width = window.innerWidth;
+  confettiCanvas.height = window.innerHeight;
+}
+window.addEventListener('resize', resizeConfetti);
+resizeConfetti();
+
+class Particle {
+  constructor() { this.reset(); }
+  reset() {
+    this.x = Math.random() * confettiCanvas.width;
+    this.y = -30;
+    this.size = Math.random() * 10 + 5;
+    this.speedY = Math.random() * 7 + 5;
+    this.speedX = Math.random() * 6 - 3;
+    this.rotation = Math.random() * 360;
+    this.rotSpeed = Math.random() * 14 - 7;
+    this.color = ['#ff3366','#ffca28','#33ff99','#3399ff','#cc33ff'][Math.floor(Math.random()*5)];
+  }
+  update() {
+    this.y += this.speedY;
+    this.x += this.speedX;
+    this.rotation += this.rotSpeed;
+    this.speedY += 0.22;
+    if (this.y > confettiCanvas.height + 60) this.reset();
+  }
+  draw() {
+    ctx.save();
+    ctx.translate(this.x, this.y);
+    ctx.rotate(this.rotation * Math.PI / 180);
+    ctx.fillStyle = this.color;
+    ctx.globalAlpha = 0.9;
+    ctx.fillRect(-this.size/2, -this.size/2, this.size, this.size);
+    ctx.restore();
+  }
+}
+
+function startConfetti(count = 200) {
+  for (let i = 0; i < count; i++) particles.push(new Particle());
+  if (particles.length > 0) animateConfetti();
+}
+
+function animateConfetti() {
+  ctx.clearRect(0,0,confettiCanvas.width,confettiCanvas.height);
+  particles.forEach(p => { p.update(); p.draw(); });
+  if (particles.length > 0) requestAnimationFrame(animateConfetti);
+}
+
+// Create slots for each ring
+function createSlots(ring) {
+  const slotAngle = 360 / SLOTS_PER_REEL;
+  const seed = Math.floor(Math.random() * SLOTS_PER_REEL);
+  for (let i = 0; i < SLOTS_PER_REEL; i++) {
+    const slot = document.createElement('div');
+    slot.className = 'slot';
+    slot.style.transform = `rotateX(${slotAngle * i}deg) translateZ(${REEL_RADIUS}px)`;
+    const sym = symbols[(seed + i) % symbols.length];
+    slot.innerHTML = `<span>${sym}</span>`;
+    ring.appendChild(slot);
+  }
+  ring.dataset.offset = 0;
+}
+
+[1,2,3,4,5].forEach(i => createSlots(document.getElementById(`ring${i}`)));
+
+// Spin function with CSS transform animation
+function spin() {
+  if (isSpinning) return;
+  isSpinning = true;
+  result.classList.remove('show');
+  
+  const finalOffsets = [];
+
+  for (let i = 1; i <= 5; i++) {
+    const ring = document.getElementById(`ring${i}`);
+    const currentOffset = parseFloat(ring.dataset.offset || 0);
+    
+    // Spin multiple rotations + random final position
+    const spins = 5 + Math.floor(Math.random() * 3); // 5-7 full rotations
+    const finalPos = Math.floor(Math.random() * SLOTS_PER_REEL);
+    const totalRotation = currentOffset - (spins * 360 + (finalPos * 360 / SLOTS_PER_REEL));
+    
+    finalOffsets.push(finalPos);
+    
+    const duration = 2.5 + (i * 0.5); // Stagger stop times
+    ring.style.transition = `transform ${duration}s cubic-bezier(0.17, 0.67, 0.12, 0.99)`;
+    ring.style.transform = `translateX(-50%) rotateX(${totalRotation}deg)`;
+    ring.dataset.offset = totalRotation % 360;
+    ring.dataset.position = finalPos;
+  }
+
+  setTimeout(() => {
+    isSpinning = false;
+    checkWin(finalOffsets);
+    // Reset transitions
+    document.querySelectorAll('.ring').forEach(r => r.style.transition = 'none');
+  }, 5000);
+}
+
+function checkWin(positions) {
+  // Get the symbol at each reel's final position
+  const centerSymbols = positions.map(pos => symbols[pos % symbols.length]);
+
+  const counts = {};
+  centerSymbols.forEach(s => counts[s] = (counts[s] || 0) + 1);
+
+  const maxCount = Math.max(...Object.values(counts));
+  const winningSymbol = Object.keys(counts).find(s => counts[s] === maxCount);
+  
+  let multiplier = 0;
+  let msg = "TRY AGAIN";
+
+  if (maxCount >= 5) {
+    multiplier = 25;
+    msg = `🎰 JACKPOT! ${winningSymbol} ×5`;
+    startConfetti(450);
+    topLights.classList.add('flashing');
+  } else if (maxCount === 4) {
+    multiplier = 10;
+    msg = `✨ BIG WIN! ${winningSymbol} ×4`;
+    startConfetti(250);
+    topLights.classList.add('flashing');
+  } else if (maxCount === 3) {
+    multiplier = 3;
+    msg = `🎉 WIN! ${winningSymbol} ×3`;
+    startConfetti(120);
+    topLights.classList.add('flashing');
+  } else {
+    topLights.classList.remove('flashing');
+  }
+
+  if (multiplier > 0) {
+    credits += currentBet * multiplier;
+    setTimeout(() => topLights.classList.remove('flashing'), 3000);
+  }
+
+  result.textContent = msg;
+  result.classList.add('show');
+  updateUI();
+}
+
+function updateUI() {
+  creditsEl.textContent = credits;
+  betEl.textContent = currentBet;
+  
+  // Update bet buttons - disable if insufficient credits or spinning
+  document.querySelectorAll('.bet-btn').forEach(btn => {
+    const amt = parseInt(btn.dataset.bet);
+    btn.disabled = isSpinning || credits < amt;
+    // Highlight active bet
+    if (amt === currentBet) {
+      btn.classList.add('active');
+    } else {
+      btn.classList.remove('active');
+    }
+  });
+  
+  // Max bet button
+  const maxBetBtn = document.querySelector('.max-bet');
+  maxBetBtn.disabled = isSpinning || credits < 10;
+  if (currentBet === Math.min(credits, 200)) {
+    maxBetBtn.classList.add('active');
+  } else {
+    maxBetBtn.classList.remove('active');
+  }
+}
+
+// Betting buttons
+document.querySelectorAll('.bet-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    if (isSpinning) return;
+    const amt = parseInt(btn.dataset.bet);
+    if (credits >= amt) {
+      currentBet = amt;
+      updateUI();
+    }
+  });
+});
+
+document.querySelector('.max-bet').addEventListener('click', () => {
+  if (isSpinning || credits < 10) return;
+  currentBet = Math.min(credits, 200);
+  updateUI();
+});
+
+// Lever pull logic
+lever.addEventListener('pointerdown', e => {
+  e.preventDefault();
+  if (isSpinning || credits < currentBet) return;
+  isPulling = true;
+  lever.classList.add('pulled');
+});
+
+window.addEventListener('pointerup', () => {
+  if (!isPulling) return;
+  isPulling = false;
+  lever.classList.remove('pulled');
+
+  if (credits >= currentBet) {
+    credits -= currentBet;
+    updateUI();
+    spin();
+  }
+});
+
+// Prevent context menu on lever
+lever.addEventListener('contextmenu', e => e.preventDefault());
+
+updateUI();
+</script>
+</body>
+</html>
