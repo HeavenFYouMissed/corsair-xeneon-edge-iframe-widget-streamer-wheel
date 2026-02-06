@@ -1,0 +1,318 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Giveaway Wheel – Stream Edition</title>
+  <meta name="description" content="Interactive giveaway wheel for streams – drag to spin"/>
+
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    html, body {
+      height: 100%;
+      width: 100%;
+      overflow: hidden;
+      background: #0e0e1f;
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      color: #fff;
+      touch-action: none;
+    }
+
+    #container {
+      position: relative;
+      width: 100%;
+      height: 100%;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+    }
+
+    canvas {
+      max-width: 94vmin;
+      max-height: 94vmin;
+      width: 100%;
+      height: 100%;
+      image-rendering: crisp-edges;
+    }
+
+    #pointer {
+      position: absolute;
+      top: 2%;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 0;
+      height: 0;
+      border-left: 28px solid transparent;
+      border-right: 28px solid transparent;
+      border-bottom: 60px solid #ff3366;
+      filter: drop-shadow(0 4px 12px #ff336680);
+      z-index: 10;
+      pointer-events: none;
+    }
+
+    #winning-number {
+      position: absolute;
+      bottom: 4%;
+      left: 50%;
+      transform: translateX(-50%);
+      font-size: clamp(4rem, 12vw, 14rem);
+      font-weight: 900;
+      color: #fff;
+      text-shadow: 
+        0 0 20px #ff3366,
+        0 0 40px #ff3366aa,
+        4px 4px 0 #000,
+       -4px -4px 0 #000;
+      background: rgba(0,0,0,0.5);
+      padding: 0.4em 0.8em;
+      border-radius: 16px;
+      border: 3px solid #ff3366;
+      z-index: 5;
+      pointer-events: none;
+    }
+  </style>
+</head>
+<body>
+
+<div id="container">
+  <div id="pointer"></div>
+  <canvas id="wheel"></canvas>
+  <div id="winning-number">–</div>
+</div>
+
+<script>
+// ──────────────────────────────────────────────
+//   Modern Giveaway Wheel – Stream Optimized
+// ──────────────────────────────────────────────
+
+const canvas = document.getElementById('wheel');
+const ctx    = canvas.getContext('2d');
+const numberDisplay = document.getElementById('winning-number');
+
+let width, height, centerX, centerY, radius;
+
+// Config – feel free to tweak these
+const SEGMENTS          = getSegmentsFromHash() || 100;
+const BG_COLOR          = '#0e0e1f';
+const WHEEL_BG          = '#1a1a3a';
+const POINTER_COLOR     = '#ff3366';
+const TEXT_COLOR        = '#ffffff';
+const SHADOW_COLOR      = 'rgba(0,0,0,0.7)';
+const GRADIENT_COLORS   = ['#ff3366', '#ff6f61', '#ffca28', '#33ff99', '#3399ff', '#cc33ff'];
+const PIN_COLOR         = '#ffffff';
+const PIN_GLOW          = '#ff336680';
+
+let rotation        = 0;
+let velocity        = 0;
+let isDragging      = false;
+let lastMouseAngle  = 0;
+let lastTime        = 0;
+
+// Physics tuning
+const FRICTION          = 0.992;
+const MIN_VELOCITY      = 0.0003;
+const SENSITIVITY       = 1.6;
+
+function resize() {
+  width   = canvas.clientWidth;
+  height  = canvas.clientHeight;
+  canvas.width  = width;
+  canvas.height = height;
+
+  centerX = width  / 2;
+  centerY = height / 2;
+  radius  = Math.min(width, height) * 0.46;
+}
+
+function getSegmentsFromHash() {
+  const hash = location.hash.slice(1);
+  const n = parseInt(hash, 10);
+  return isNaN(n) || n < 2 ? null : n;
+}
+
+function getSegmentColor(i) {
+  return GRADIENT_COLORS[i % GRADIENT_COLORS.length];
+}
+
+function drawWheel() {
+  ctx.save();
+  ctx.clearRect(0, 0, width, height);
+
+  // background
+  ctx.fillStyle = BG_COLOR;
+  ctx.fillRect(0, 0, width, height);
+
+  ctx.translate(centerX, centerY);
+  ctx.rotate(rotation);
+
+  const angleStep = Math.PI * 2 / SEGMENTS;
+
+  // wheel background circle
+  ctx.beginPath();
+  ctx.arc(0, 0, radius + 12, 0, Math.PI * 2);
+  ctx.fillStyle = WHEEL_BG;
+  ctx.shadowColor = SHADOW_COLOR;
+  ctx.shadowBlur = 30;
+  ctx.fill();
+  ctx.shadowBlur = 0;
+
+  // segments
+  for (let i = 0; i < SEGMENTS; i++) {
+    const start = i * angleStep;
+    const end   = (i + 1) * angleStep;
+
+    ctx.beginPath();
+    ctx.moveTo(0, 0);
+    ctx.arc(0, 0, radius, start, end);
+    ctx.closePath();
+
+    // gradient fill
+    const grad = ctx.createRadialGradient(0,0,0, 0,0,radius*0.7);
+    grad.addColorStop(0, '#ffffff22');
+    grad.addColorStop(1, getSegmentColor(i));
+
+    ctx.fillStyle = grad;
+    ctx.fill();
+
+    // border
+    ctx.strokeStyle = '#00000088';
+    ctx.lineWidth = 2;
+    ctx.stroke();
+
+    // number (centered in segment)
+    ctx.save();
+    ctx.rotate(start + angleStep/2);
+    ctx.translate(radius * 0.68, 0);
+    ctx.rotate(-Math.PI/2);
+
+    ctx.font = `bold ${radius / 18}px Arial`;
+    ctx.fillStyle = TEXT_COLOR;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.shadowColor = '#000';
+    ctx.shadowBlur = 8;
+    ctx.fillText(i + 1, 0, 0);
+
+    ctx.restore();
+  }
+
+  // center hub + pins
+  ctx.beginPath();
+  ctx.arc(0, 0, radius * 0.08, 0, Math.PI * 2);
+  ctx.fillStyle = '#222';
+  ctx.fill();
+
+  ctx.fillStyle = PIN_COLOR;
+  ctx.shadowColor = PIN_GLOW;
+  ctx.shadowBlur = 12;
+
+  for (let i = 0; i < SEGMENTS; i++) {
+    const a = i * angleStep + rotation;
+    const x = Math.cos(a) * (radius - 14);
+    const y = Math.sin(a) * (radius - 14);
+    ctx.beginPath();
+    ctx.arc(x, y, 5, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  ctx.restore();
+}
+
+function getWinningNumber() {
+  let norm = ((rotation % (Math.PI*2)) + Math.PI*2) % (Math.PI*2);
+  let segment = Math.floor(SEGMENTS * (1 - norm / (Math.PI*2)));
+  let winner = (segment + SEGMENTS) % SEGMENTS + 1;
+  return winner;
+}
+
+function updateDisplay() {
+  numberDisplay.textContent = getWinningNumber();
+}
+
+function animate(time = 0) {
+  if (!lastTime) lastTime = time;
+  const dt = time - lastTime;
+  lastTime = time;
+
+  if (!isDragging) {
+    velocity *= FRICTION;
+    rotation += velocity * dt * 0.06;
+
+    if (Math.abs(velocity) < MIN_VELOCITY) {
+      velocity = 0;
+    }
+  }
+
+  drawWheel();
+  updateDisplay();
+
+  requestAnimationFrame(animate);
+}
+
+// ─── Input ──────────────────────────────────────
+
+function getAngleFromEvent(e) {
+  const rect = canvas.getBoundingClientRect();
+  const mx = (e.clientX || e.touches?.[0]?.clientX) - rect.left;
+  const my = (e.clientY || e.touches?.[0]?.clientY) - rect.top;
+  return Math.atan2(my - centerY, mx - centerX);
+}
+
+function onPointerDown(e) {
+  e.preventDefault();
+  isDragging = true;
+  lastMouseAngle = getAngleFromEvent(e);
+  velocity = 0;
+  canvas.style.cursor = 'grabbing';
+}
+
+function onPointerMove(e) {
+  if (!isDragging) return;
+  e.preventDefault();
+
+  const currentAngle = getAngleFromEvent(e);
+  let delta = currentAngle - lastMouseAngle;
+
+  if (delta > Math.PI)  delta -= Math.PI*2;
+  if (delta < -Math.PI) delta += Math.PI*2;
+
+  rotation += delta * SENSITIVITY;
+  velocity = delta * 50;
+
+  lastMouseAngle = currentAngle;
+}
+
+function onPointerUp() {
+  isDragging = false;
+  canvas.style.cursor = 'grab';
+}
+
+// Events
+canvas.addEventListener('pointerdown', onPointerDown);
+window.addEventListener('pointermove', onPointerMove);
+window.addEventListener('pointerup',   onPointerUp);
+window.addEventListener('pointercancel', onPointerUp);
+
+canvas.addEventListener('mousedown', onPointerDown);
+window.addEventListener('mousemove', onPointerMove);
+window.addEventListener('mouseup',   onPointerUp);
+
+canvas.addEventListener('touchstart', onPointerDown);
+window.addEventListener('touchmove', onPointerMove, {passive: false});
+window.addEventListener('touchend', onPointerUp);
+
+// Resize & start
+window.addEventListener('resize', resize);
+window.addEventListener('hashchange', () => location.reload());
+
+resize();
+requestAnimationFrame(animate);
+canvas.style.cursor = 'grab';
+</script>
+</body>
+</html>

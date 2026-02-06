@@ -1,0 +1,330 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Giveaway Wheel – Glassmorphism Stream Edition</title>
+  <meta name="description" content="Interactive frosted-glass giveaway wheel for streams – drag to spin"/>
+
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    html, body {
+      height: 100%;
+      width: 100%;
+      overflow: hidden;
+      background: #050505;
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      color: #ffffff;
+      touch-action: none;
+    }
+
+    /* Full-screen glass overlay – core of the glassmorphism effect */
+    .glass-layer {
+      position: absolute;
+      inset: 0;
+      z-index: 1;
+      background-color: rgba(0, 0, 0, 0.25);
+      backdrop-filter: blur(20px);
+      -webkit-backdrop-filter: blur(20px);
+      pointer-events: none;
+      transition: backdrop-filter 0.4s ease;
+    }
+
+    #container {
+      position: relative;
+      width: 100%;
+      height: 100%;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      z-index: 2;
+    }
+
+    canvas {
+      max-width: 94vmin;
+      max-height: 94vmin;
+      width: 100%;
+      height: 100%;
+      image-rendering: crisp-edges;
+      filter: drop-shadow(0 20px 60px rgba(0,0,0,0.7));
+    }
+
+    #pointer {
+      position: absolute;
+      top: 2%;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 0;
+      height: 0;
+      border-left: 32px solid transparent;
+      border-right: 32px solid transparent;
+      border-bottom: 70px solid #ff3366;
+      filter: drop-shadow(0 6px 16px #ff3366aa);
+      z-index: 10;
+      pointer-events: none;
+    }
+
+    #winning-number {
+      position: absolute;
+      bottom: 5%;
+      left: 50%;
+      transform: translateX(-50%);
+      font-size: clamp(5rem, 14vw, 16rem);
+      font-weight: 900;
+      color: #fff;
+      text-shadow: 
+        0 0 25px #ff3366,
+        0 0 50px #ff3366aa,
+        6px 6px 0 #000,
+       -6px -6px 0 #000;
+      background: rgba(20, 20, 20, 0.75);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      padding: 0.5em 1em;
+      border-radius: 20px;
+      border: 1px solid rgba(255,255,255,0.12);
+      box-shadow: 
+        inset 0 1px 0 rgba(255,255,255,0.15),
+        0 8px 32px rgba(0,0,0,0.4);
+      z-index: 5;
+      pointer-events: none;
+    }
+  </style>
+</head>
+<body>
+
+<div class="glass-layer"></div>
+
+<div id="container">
+  <div id="pointer"></div>
+  <canvas id="wheel"></canvas>
+  <div id="winning-number">–</div>
+</div>
+
+<script>
+// ──────────────────────────────────────────────
+//   Glassmorphism Giveaway Wheel – Stream Ready
+// ──────────────────────────────────────────────
+
+const canvas = document.getElementById('wheel');
+const ctx    = canvas.getContext('2d');
+const numberDisplay = document.getElementById('winning-number');
+
+let width, height, centerX, centerY, radius;
+
+// Config
+const SEGMENTS          = getSegmentsFromHash() || 100;
+const BG_COLOR          = '#050505';
+const WHEEL_BG          = 'rgba(20,20,40,0.6)';
+const POINTER_COLOR     = '#ff3366';
+const TEXT_COLOR        = '#ffffff';
+const SHADOW_COLOR      = 'rgba(0,0,0,0.8)';
+const GRADIENT_COLORS   = ['#ff3366', '#ff6f61', '#ffca28', '#33ff99', '#3399ff', '#cc33ff'];
+const PIN_COLOR         = '#ffffff';
+const PIN_GLOW          = '#ff336680';
+
+let rotation        = 0;
+let velocity        = 0;
+let isDragging      = false;
+let lastMouseAngle  = 0;
+let lastTime        = 0;
+
+// Physics
+const FRICTION          = 0.9915;
+const MIN_VELOCITY      = 0.0003;
+const SENSITIVITY       = 1.65;
+
+function resize() {
+  width   = canvas.clientWidth;
+  height  = canvas.clientHeight;
+  canvas.width  = width;
+  canvas.height = height;
+
+  centerX = width  / 2;
+  centerY = height / 2;
+  radius  = Math.min(width, height) * 0.455;
+}
+
+function getSegmentsFromHash() {
+  const hash = location.hash.slice(1);
+  const n = parseInt(hash, 10);
+  return isNaN(n) || n < 2 ? null : n;
+}
+
+function getSegmentColor(i) {
+  return GRADIENT_COLORS[i % GRADIENT_COLORS.length];
+}
+
+function drawWheel() {
+  ctx.save();
+  ctx.clearRect(0, 0, width, height);
+
+  ctx.fillStyle = BG_COLOR;
+  ctx.fillRect(0, 0, width, height);
+
+  ctx.translate(centerX, centerY);
+  ctx.rotate(rotation);
+
+  const angleStep = Math.PI * 2 / SEGMENTS;
+
+  // wheel base under glass
+  ctx.beginPath();
+  ctx.arc(0, 0, radius + 14, 0, Math.PI * 2);
+  ctx.fillStyle = WHEEL_BG;
+  ctx.shadowColor = SHADOW_COLOR;
+  ctx.shadowBlur = 40;
+  ctx.fill();
+  ctx.shadowBlur = 0;
+
+  // segments
+  for (let i = 0; i < SEGMENTS; i++) {
+    const start = i * angleStep;
+    const end   = (i + 1) * angleStep;
+
+    ctx.beginPath();
+    ctx.moveTo(0, 0);
+    ctx.arc(0, 0, radius, start, end);
+    ctx.closePath();
+
+    const grad = ctx.createRadialGradient(0,0,0, 0,0,radius*0.65);
+    grad.addColorStop(0, 'rgba(255,255,255,0.18)');
+    grad.addColorStop(1, getSegmentColor(i));
+
+    ctx.fillStyle = grad;
+    ctx.fill();
+
+    ctx.strokeStyle = 'rgba(0,0,0,0.5)';
+    ctx.lineWidth = 2.5;
+    ctx.stroke();
+
+    // number
+    ctx.save();
+    ctx.rotate(start + angleStep/2);
+    ctx.translate(radius * 0.67, 0);
+    ctx.rotate(-Math.PI/2);
+
+    ctx.font = `bold ${radius / 17}px Arial`;
+    ctx.fillStyle = TEXT_COLOR;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.shadowColor = '#000';
+    ctx.shadowBlur = 10;
+    ctx.fillText(i + 1, 0, 0);
+
+    ctx.restore();
+  }
+
+  // center hub
+  ctx.beginPath();
+  ctx.arc(0, 0, radius * 0.09, 0, Math.PI * 2);
+  ctx.fillStyle = 'rgba(30,30,50,0.8)';
+  ctx.fill();
+
+  // pins with glow
+  ctx.fillStyle = PIN_COLOR;
+  ctx.shadowColor = PIN_GLOW;
+  ctx.shadowBlur = 14;
+
+  for (let i = 0; i < SEGMENTS; i++) {
+    const a = i * angleStep;
+    const x = Math.cos(a) * (radius - 16);
+    const y = Math.sin(a) * (radius - 16);
+    ctx.beginPath();
+    ctx.arc(x, y, 5.5, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  ctx.restore();
+}
+
+function getWinningNumber() {
+  let norm = ((rotation % (Math.PI*2)) + Math.PI*2) % (Math.PI*2);
+  let segment = Math.floor(SEGMENTS * (1 - norm / (Math.PI*2)));
+  return ((segment + SEGMENTS) % SEGMENTS) + 1;
+}
+
+function updateDisplay() {
+  numberDisplay.textContent = getWinningNumber();
+}
+
+function animate(time = 0) {
+  if (!lastTime) lastTime = time;
+  const dt = time - lastTime;
+  lastTime = time;
+
+  if (!isDragging) {
+    velocity *= FRICTION;
+    rotation += velocity * dt * 0.058;
+    if (Math.abs(velocity) < MIN_VELOCITY) velocity = 0;
+  }
+
+  drawWheel();
+  updateDisplay();
+
+  requestAnimationFrame(animate);
+}
+
+// Input handling (mouse + touch)
+function getAngleFromEvent(e) {
+  const rect = canvas.getBoundingClientRect();
+  const mx = (e.clientX || e.touches?.[0]?.clientX) - rect.left;
+  const my = (e.clientY || e.touches?.[0]?.clientY) - rect.top;
+  return Math.atan2(my - centerY, mx - centerX);
+}
+
+function onPointerDown(e) {
+  e.preventDefault();
+  isDragging = true;
+  lastMouseAngle = getAngleFromEvent(e);
+  velocity = 0;
+  canvas.style.cursor = 'grabbing';
+}
+
+function onPointerMove(e) {
+  if (!isDragging) return;
+  e.preventDefault();
+
+  const currentAngle = getAngleFromEvent(e);
+  let delta = currentAngle - lastMouseAngle;
+
+  if (delta > Math.PI) delta -= Math.PI*2;
+  if (delta < -Math.PI) delta += Math.PI*2;
+
+  rotation += delta * SENSITIVITY;
+  velocity = delta * 55;
+
+  lastMouseAngle = currentAngle;
+}
+
+function onPointerUp() {
+  isDragging = false;
+  canvas.style.cursor = 'grab';
+}
+
+canvas.addEventListener('pointerdown', onPointerDown);
+window.addEventListener('pointermove', onPointerMove);
+window.addEventListener('pointerup', onPointerUp);
+window.addEventListener('pointercancel', onPointerUp);
+
+// Fallback mouse/touch
+canvas.addEventListener('mousedown', onPointerDown);
+window.addEventListener('mousemove', onPointerMove);
+window.addEventListener('mouseup', onPointerUp);
+canvas.addEventListener('touchstart', onPointerDown);
+window.addEventListener('touchmove', onPointerMove, {passive: false});
+window.addEventListener('touchend', onPointerUp);
+
+window.addEventListener('resize', resize);
+window.addEventListener('hashchange', () => location.reload());
+
+resize();
+requestAnimationFrame(animate);
+canvas.style.cursor = 'grab';
+</script>
+</body>
+</html>
